@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import ModelConfig from './components/ModelConfig';
 import TaskConfig from './components/TaskConfig';
 import TaskList from './components/TaskList';
+import CourseEditor from './components/CourseEditor';
 import {
   Model,
   Task,
@@ -14,16 +15,19 @@ import {
   CreateTaskResponse,
   TasksResponse,
   ApiResponse,
+  CourseData,
 } from './types';
 import './App.css';
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'video' | 'course'>('video');
   const [models, setModels] = useState<Model[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task>>({});
   const [appConfig, setAppConfig] = useState<AppConfig>({});
   const [modelAlert, setModelAlert] = useState<AlertProps | null>(null);
   const [taskAlert, setTaskAlert] = useState<AlertProps | null>(null);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollInterval, setPollInterval] = useState<number | null>(null);
+  const [courseData, setCourseData] = useState<CourseData | null>(null);
 
   // 加载应用配置
   const loadAppConfig = useCallback(async () => {
@@ -337,36 +341,157 @@ function App() {
     };
   }, [pollInterval]);
 
+  // 处理课程数据保存
+  const handleCourseSave = useCallback((data: CourseData) => {
+    setCourseData(data);
+    const jsonStr = JSON.stringify(data, null, 2);
+    console.log("课程数据已保存:", jsonStr);
+
+    // 创建下载链接
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `course-${data.id || Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    alert('课程数据已保存并下载！');
+  }, []);
+
+  // 加载JSON文件
+  const handleLoadJSON = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const jsonStr = event.target?.result as string;
+          const data = JSON.parse(jsonStr) as CourseData;
+          setCourseData(data);
+          alert('JSON文件加载成功！');
+        } catch (error) {
+          alert('JSON文件格式错误: ' + (error instanceof Error ? error.message : '未知错误'));
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-5">
-      <div className="max-w-[1200px] mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-8 text-center">
-          <h1 className="text-3xl font-semibold mb-2.5">Bilibili视频字幕下载与总结</h1>
-          <p className="opacity-90 text-sm">
-            批量下载B站视频字幕，AI自动生成内容总结 · 支持收藏夹批量处理
-          </p>
-        </div>
-
-        <div className="p-8">
-          <ModelConfig
-            models={models}
-            onAddModel={handleAddModel}
-            onEditModel={handleEditModel}
-            onDeleteModel={handleDeleteModel}
-            alert={modelAlert}
-          />
-
-          <TaskConfig
-            models={models}
-            appConfig={appConfig}
-            onTaskSubmit={handleTaskSubmit}
-            alert={taskAlert}
-            onConfigChange={saveAppConfig}
-          />
-
-          <TaskList tasks={tasks} onStopTask={handleStopTask} />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* 标签页导航 */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1400px] mx-auto px-5">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('video')}
+              className={`px-6 py-3 font-medium transition-colors ${activeTab === 'video'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              📹 视频下载
+            </button>
+            <button
+              onClick={() => setActiveTab('course')}
+              className={`px-6 py-3 font-medium transition-colors ${activeTab === 'course'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              📚 课程编辑
+            </button>
+          </div>
         </div>
       </div>
+
+      {activeTab === 'video' && (
+        <div className="p-5">
+          <div className="max-w-[1200px] mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-8 text-center">
+              <h1 className="text-3xl font-semibold mb-2.5">Bilibili视频字幕下载与总结</h1>
+              <p className="opacity-90 text-sm">
+                批量下载B站视频字幕，AI自动生成内容总结 · 支持收藏夹批量处理
+              </p>
+            </div>
+
+            <div className="p-8">
+              <ModelConfig
+                models={models}
+                onAddModel={handleAddModel}
+                onEditModel={handleEditModel}
+                onDeleteModel={handleDeleteModel}
+                alert={modelAlert}
+              />
+
+              <TaskConfig
+                models={models}
+                appConfig={appConfig}
+                onTaskSubmit={handleTaskSubmit}
+                alert={taskAlert}
+                onConfigChange={saveAppConfig}
+              />
+
+              <TaskList tasks={tasks} onStopTask={handleStopTask} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'course' && (
+        <div className="h-[calc(100vh-60px)]">
+          <CourseEditor initialData={courseData || undefined} onSave={handleCourseSave} />
+        </div>
+      )}
+
+      {/* 底部控件列表 */}
+      {activeTab === 'course' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 shadow-lg z-50">
+          <div className="max-w-[1400px] mx-auto px-6 py-3">
+            <div className="flex gap-3 items-center justify-center">
+              <button
+                onClick={handleLoadJSON}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium transition-colors"
+              >
+                📂 打开JSON文件
+              </button>
+              <button
+                onClick={() => {
+                  if (courseData) {
+                    const jsonStr = JSON.stringify(courseData, null, 2);
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `course-${courseData.id || Date.now()}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } else {
+                    alert('请先编辑课程数据');
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm font-medium transition-colors"
+              >
+                💾 保存JSON文件
+              </button>
+              <div className="text-sm text-gray-500 ml-4">
+                当前数据: {courseData ? `${courseData.title || '未命名课程'} (${courseData.chapters?.length || 0}章)` : '无'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

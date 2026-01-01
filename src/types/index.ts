@@ -99,3 +99,47 @@ export interface ModelFormData {
   api_key: string;
 }
 
+// 课程数据结构类型定义
+export interface ExerciseOption {
+  id: string;
+  text: string;
+  is_correct: boolean;
+}
+
+export interface Exercise {
+  id: string;
+  question: string;
+  score: number;
+  type: string;
+  options: ExerciseOption[];
+}
+
+export interface LeadingQuestion {
+  id: string;
+  question: string;
+}
+
+export interface Section {
+  id: string;
+  title: string;
+  order: number;
+  estimated_time: number;
+  video_url: string;
+  leading_questions: LeadingQuestion[];
+  exercises: Exercise[];
+}
+
+export interface Chapter {
+  id: string;
+  title: string;
+  order: number;
+  sections: Section[];
+}
+
+export interface CourseData {
+  id: string;
+  title: string;
+  description: string;
+  chapters: Chapter[];
+}
+
