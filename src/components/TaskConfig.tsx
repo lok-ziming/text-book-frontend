@@ -1,9 +1,10 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import Alert from './Alert';
-import { Model, AppConfig, AlertProps, CreateTaskRequest } from '../types';
+import { Model, AppConfig, AlertProps, CreateTaskRequest, Workspace } from '../types';
 
 interface TaskConfigProps {
   models: Model[];
+  workspaces: Workspace[];
   appConfig: AppConfig;
   onTaskSubmit: (taskData: CreateTaskRequest) => Promise<void>;
   alert: AlertProps | null;
@@ -12,19 +13,19 @@ interface TaskConfigProps {
 
 interface TaskFormData {
   videoUrls: string;
-  customFolderName: string;
+  workspaceName: string;
   downloadAllParts: boolean;
   maxConcurrentTasks: number;
   genSummary: boolean;
   genFullContent: boolean;
   genExercises: boolean;
   genQuestions: boolean;
-  outputDir: string;
   modelName: string;
 }
 
 export default function TaskConfig({
   models,
+  workspaces,
   appConfig,
   onTaskSubmit,
   alert,
@@ -32,14 +33,13 @@ export default function TaskConfig({
 }: TaskConfigProps) {
   const [formData, setFormData] = useState<TaskFormData>({
     videoUrls: '',
-    customFolderName: '',
+    workspaceName: '',
     downloadAllParts: false,
     maxConcurrentTasks: 2,
     genSummary: true,
     genFullContent: true,
     genExercises: true,
     genQuestions: true,
-    outputDir: 'subtitles',
     modelName: '',
   });
 
@@ -47,10 +47,10 @@ export default function TaskConfig({
     if (appConfig) {
       setFormData((prev) => ({
         ...prev,
-        outputDir: appConfig.output_directory || 'subtitles',
         downloadAllParts: appConfig.download_all_parts || false,
         maxConcurrentTasks: appConfig.max_concurrent_tasks || 2,
         modelName: appConfig.last_selected_model || '',
+        workspaceName: appConfig.last_workspace_name || '',
       }));
     }
   }, [appConfig]);
@@ -71,6 +71,10 @@ export default function TaskConfig({
       return;
     }
 
+    if (!formData.workspaceName) {
+      return;
+    }
+
     const generateOptions = {
       summary: formData.genSummary,
       full_content: formData.genFullContent,
@@ -80,20 +84,13 @@ export default function TaskConfig({
 
     await onTaskSubmit({
       urls,
-      output_dir: formData.outputDir,
+      workspace_name: formData.workspaceName,
       model_name: formData.modelName,
-      custom_folder_name: formData.customFolderName,
       download_all_parts: formData.downloadAllParts,
       generate_options: generateOptions,
     });
 
     setFormData((prev) => ({ ...prev, videoUrls: '' }));
-  };
-
-  const handleOutputDirBlur = async () => {
-    if (formData.outputDir.trim()) {
-      await onConfigChange({ output_directory: formData.outputDir.trim() });
-    }
   };
 
   const handleDownloadAllPartsChange = async (checked: boolean) => {
@@ -110,10 +107,10 @@ export default function TaskConfig({
   };
 
   return (
-    <div className="mb-8">
+    <div>
       <div className="flex items-center mb-4">
-        <div className="w-1 h-5 bg-blue-500 rounded mr-2.5"></div>
-        <h2 className="text-lg font-semibold text-gray-800">任务配置</h2>
+        <div className="w-1 h-5 bg-indigo-500 rounded mr-2.5"></div>
+        <h2 className="text-lg font-semibold text-gray-800">创建下载任务</h2>
       </div>
 
       {alert && <Alert {...alert} />}
@@ -139,19 +136,25 @@ export default function TaskConfig({
 
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            自定义文件夹名称（可选）
+            选择工作区 <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
+          <select
             className="w-full p-3 border-2 border-gray-200 rounded-lg text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            placeholder="留空则使用视频标题作为文件夹名称"
-            value={formData.customFolderName}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setFormData({ ...formData, customFolderName: e.target.value })
+            value={formData.workspaceName}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setFormData({ ...formData, workspaceName: e.target.value })
             }
-          />
+            required
+          >
+            <option value="">请选择工作区</option>
+            {workspaces.map((workspace) => (
+              <option key={workspace.name} value={workspace.name}>
+                {workspace.name} ({workspace.path})
+              </option>
+            ))}
+          </select>
           <div className="text-xs text-gray-600 mt-1">
-            💡 提示：多个URL时，指定此选项可将所有视频文件放在同一个文件夹内
+            💡 提示：视频文件将保存到所选工作区的路径下。如果没有工作区，请先在上方"工作区配置"中添加
           </div>
         </div>
 
@@ -238,43 +241,23 @@ export default function TaskConfig({
           </div>
         </div>
 
-        <div className="flex gap-2.5 mb-5">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">输出根目录</label>
-            <input
-              type="text"
-              className="w-full p-3 border-2 border-gray-200 rounded-lg text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              value={formData.outputDir}
-              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                setFormData({ ...formData, outputDir: e.target.value })
-              }
-              onBlur={handleOutputDirBlur}
-              placeholder="例如: subtitles 或 D:/Videos/subtitles"
-              required
-            />
-            <div className="text-xs text-gray-600 mt-1">
-              支持相对路径（subtitles）或绝对路径（D:/Videos/subtitles）
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">选择模型</label>
-            <select
-              className="w-full p-3 border-2 border-gray-200 rounded-lg text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              value={formData.modelName}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                setFormData({ ...formData, modelName: e.target.value })
-              }
-              required
-            >
-              <option value="">请选择模型</option>
-              {models.map((model) => (
-                <option key={model.id} value={model.name}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-gray-700 mb-2">选择模型</label>
+          <select
+            className="w-full p-3 border-2 border-gray-200 rounded-lg text-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            value={formData.modelName}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setFormData({ ...formData, modelName: e.target.value })
+            }
+            required
+          >
+            <option value="">请选择模型</option>
+            {models.map((model) => (
+              <option key={model.id} value={model.name}>
+                {model.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <button

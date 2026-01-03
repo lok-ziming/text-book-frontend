@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import ModelConfig from './components/ModelConfig';
+import WorkspaceConfig from './components/WorkspaceConfig';
 import TaskConfig from './components/TaskConfig';
 import TaskList from './components/TaskList';
 import CourseEditor from './components/CourseEditor';
@@ -16,15 +17,20 @@ import {
   TasksResponse,
   ApiResponse,
   CourseData,
+  Workspace,
+  WorkspacesResponse,
 } from './types';
 import './App.css';
 
+// 工作区配置功能已添加
 function App() {
   const [activeTab, setActiveTab] = useState<'video' | 'course'>('video');
   const [models, setModels] = useState<Model[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task>>({});
   const [appConfig, setAppConfig] = useState<AppConfig>({});
   const [modelAlert, setModelAlert] = useState<AlertProps | null>(null);
+  const [workspaceAlert, setWorkspaceAlert] = useState<AlertProps | null>(null);
   const [taskAlert, setTaskAlert] = useState<AlertProps | null>(null);
   const [pollInterval, setPollInterval] = useState<number | null>(null);
   const [courseData, setCourseData] = useState<CourseData | null>(null);
@@ -132,6 +138,26 @@ function App() {
         message: '加载模型失败: ' + errorMessage + '。请确保后端服务已启动并正确配置API路径。',
         type: 'error',
       });
+    }
+  }, []);
+
+  // 加载工作区列表
+  const loadWorkspaces = useCallback(async () => {
+    try {
+      const response = await fetch('/api/workspace');
+
+      if (!response.ok) {
+        console.warn('加载工作区失败:', response.status, response.statusText);
+        return;
+      }
+
+      const data: WorkspacesResponse = await response.json();
+
+      if (data.success && data.workspaces) {
+        setWorkspaces(data.workspaces);
+      }
+    } catch (error) {
+      console.error('加载工作区失败:', error);
     }
   }, []);
 
@@ -286,8 +312,11 @@ function App() {
           setTaskAlert({ message, type: 'success' });
           setTimeout(() => setTaskAlert(null), 3000);
 
-          // 保存选择的模型
-          await saveAppConfig({ last_selected_model: taskData.model_name });
+          // 保存选择的模型和工作区
+          await saveAppConfig({
+            last_selected_model: taskData.model_name,
+            last_workspace_name: taskData.workspace_name
+          });
 
           // 开始轮询任务状态
           startPolling();
@@ -329,8 +358,9 @@ function App() {
   useEffect(() => {
     loadAppConfig();
     loadModels();
+    loadWorkspaces();
     checkCookiesConfig();
-  }, [loadAppConfig, loadModels, checkCookiesConfig]);
+  }, [loadAppConfig, loadModels, loadWorkspaces, checkCookiesConfig]);
 
   // 清理轮询
   useEffect(() => {
@@ -359,31 +389,6 @@ function App() {
     URL.revokeObjectURL(url);
 
     alert('课程数据已保存并下载！');
-  }, []);
-
-  // 加载JSON文件
-  const handleLoadJSON = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const jsonStr = event.target?.result as string;
-          const data = JSON.parse(jsonStr) as CourseData;
-          setCourseData(data);
-          alert('JSON文件加载成功！');
-        } catch (error) {
-          alert('JSON文件格式错误: ' + (error instanceof Error ? error.message : '未知错误'));
-        }
-      };
-      reader.readAsText(file);
-    };
-    input.click();
   }, []);
 
   return (
@@ -415,33 +420,58 @@ function App() {
       </div>
 
       {activeTab === 'video' && (
-        <div className="p-5">
-          <div className="max-w-[1200px] mx-auto bg-white rounded-xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-8 text-center">
-              <h1 className="text-3xl font-semibold mb-2.5">Bilibili视频字幕下载与总结</h1>
-              <p className="opacity-90 text-sm">
-                批量下载B站视频字幕，AI自动生成内容总结 · 支持收藏夹批量处理
-              </p>
+        <div className="min-h-screen p-6">
+          <div className="max-w-[1600px] mx-auto">
+            {/* 页面标题 */}
+            <div className="mb-6 bg-white rounded-xl shadow-lg overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6">
+                <h1 className="text-2xl font-bold mb-2">📹 Bilibili视频字幕下载与总结</h1>
+                <p className="opacity-90 text-sm">
+                  批量下载B站视频字幕，AI自动生成内容总结 · 支持收藏夹批量处理
+                </p>
+              </div>
             </div>
 
-            <div className="p-8">
-              <ModelConfig
-                models={models}
-                onAddModel={handleAddModel}
-                onEditModel={handleEditModel}
-                onDeleteModel={handleDeleteModel}
-                alert={modelAlert}
-              />
+            {/* 双栏布局 */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* 左侧配置区域 */}
+              <div className="lg:col-span-1 space-y-6">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <ModelConfig
+                    models={models}
+                    onAddModel={handleAddModel}
+                    onEditModel={handleEditModel}
+                    onDeleteModel={handleDeleteModel}
+                    alert={modelAlert}
+                  />
+                </div>
 
-              <TaskConfig
-                models={models}
-                appConfig={appConfig}
-                onTaskSubmit={handleTaskSubmit}
-                alert={taskAlert}
-                onConfigChange={saveAppConfig}
-              />
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <WorkspaceConfig
+                    alert={workspaceAlert}
+                    appConfig={appConfig}
+                    onWorkspacesChange={loadWorkspaces}
+                  />
+                </div>
+              </div>
 
-              <TaskList tasks={tasks} onStopTask={handleStopTask} />
+              {/* 右侧任务区域 */}
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <TaskConfig
+                    models={models}
+                    workspaces={workspaces}
+                    appConfig={appConfig}
+                    onTaskSubmit={handleTaskSubmit}
+                    alert={taskAlert}
+                    onConfigChange={saveAppConfig}
+                  />
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                  <TaskList tasks={tasks} onStopTask={handleStopTask} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -449,47 +479,7 @@ function App() {
 
       {activeTab === 'course' && (
         <div className="h-[calc(100vh-60px)]">
-          <CourseEditor initialData={courseData || undefined} onSave={handleCourseSave} />
-        </div>
-      )}
-
-      {/* 底部控件列表 */}
-      {activeTab === 'course' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 shadow-lg z-50">
-          <div className="max-w-[1400px] mx-auto px-6 py-3">
-            <div className="flex gap-3 items-center justify-center">
-              <button
-                onClick={handleLoadJSON}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium transition-colors"
-              >
-                📂 打开JSON文件
-              </button>
-              <button
-                onClick={() => {
-                  if (courseData) {
-                    const jsonStr = JSON.stringify(courseData, null, 2);
-                    const blob = new Blob([jsonStr], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `course-${courseData.id || Date.now()}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  } else {
-                    alert('请先编辑课程数据');
-                  }
-                }}
-                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm font-medium transition-colors"
-              >
-                💾 保存JSON文件
-              </button>
-              <div className="text-sm text-gray-500 ml-4">
-                当前数据: {courseData ? `${courseData.title || '未命名课程'} (${courseData.chapters?.length || 0}章)` : '无'}
-              </div>
-            </div>
-          </div>
+          <CourseEditor initialData={courseData || undefined} onSave={handleCourseSave} workspaces={workspaces} />
         </div>
       )}
     </div>

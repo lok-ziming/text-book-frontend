@@ -54,7 +54,7 @@ export default function ModelConfig({
   };
 
   return (
-    <div className="mb-8">
+    <div>
       <div className="flex items-center mb-4">
         <div className="w-1 h-5 bg-blue-500 rounded mr-2.5"></div>
         <h2 className="text-lg font-semibold text-gray-800">模型配置</h2>

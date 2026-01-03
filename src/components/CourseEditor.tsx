@@ -1,6 +1,92 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm, useFieldArray, useWatch, FormProvider, useFormContext } from 'react-hook-form';
+import { v4 as uuidv4 } from 'uuid';
 import { CourseData, Chapter, Section } from '../types';
+
+// 生成32位UUID hex字符串（类似Python的uuid.uuid4().hex）
+const generateUUID = (): string => {
+  // uuidv4() 返回格式: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  // 移除连字符得到32位hex: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  return uuidv4().replace(/-/g, '');
+};
+
+// ---------------------------------------------------------
+// 通用确认/提示对话框组件
+// ---------------------------------------------------------
+interface ConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  type?: 'info' | 'success' | 'warning' | 'error' | 'confirm';
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  confirmText?: string;
+  cancelText?: string;
+}
+
+const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+  isOpen,
+  title,
+  message,
+  type = 'info',
+  onConfirm,
+  onCancel,
+  confirmText = '确定',
+  cancelText = '取消'
+}) => {
+  if (!isOpen) return null;
+
+  const getIconAndColor = () => {
+    switch (type) {
+      case 'success':
+        return { icon: '✅', color: 'text-green-600', btnColor: 'bg-green-500 hover:bg-green-600' };
+      case 'warning':
+        return { icon: '⚠️', color: 'text-yellow-600', btnColor: 'bg-yellow-500 hover:bg-yellow-600' };
+      case 'error':
+        return { icon: '❌', color: 'text-red-600', btnColor: 'bg-red-500 hover:bg-red-600' };
+      case 'confirm':
+        return { icon: '❓', color: 'text-blue-600', btnColor: 'bg-blue-500 hover:bg-blue-600' };
+      default:
+        return { icon: 'ℹ️', color: 'text-gray-600', btnColor: 'bg-gray-500 hover:bg-gray-600' };
+    }
+  };
+
+  const { icon, color, btnColor } = getIconAndColor();
+  const showCancel = type === 'confirm' || type === 'error' || type === 'warning';
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-sm">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-200 animate-scale-in">
+        <div className="flex items-start gap-3 mb-4">
+          <span className="text-2xl">{icon}</span>
+          <div className="flex-1">
+            <h3 className={`text-lg font-semibold ${color}`}>{title}</h3>
+          </div>
+        </div>
+        <p className="text-gray-700 mb-6 ml-11 whitespace-pre-line">{message}</p>
+        <div className="flex justify-end gap-3">
+          {showCancel && onCancel && (
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-gray-700 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+            >
+              {cancelText}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (onConfirm) onConfirm();
+              if (onCancel) onCancel();
+            }}
+            className={`px-4 py-2 text-white rounded transition-colors ${btnColor}`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------
 // 1. 左侧：递归树组件 (只负责导航和展示结构)
@@ -521,7 +607,7 @@ const LeadingQuestionsManager: React.FC<LeadingQuestionsManagerProps> = ({ activ
         <h3 className="text-lg font-semibold">引导问题</h3>
         <button
           type="button"
-          onClick={() => append({ id: `uuid-${Date.now()}`, question: "" })}
+          onClick={() => append({ id: generateUUID(), question: "" })}
           className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
         >
           + 添加问题
@@ -576,7 +662,7 @@ const ExercisesManager: React.FC<ExercisesManagerProps> = ({ activePath }) => {
         <button
           type="button"
           onClick={() => append({
-            id: `uuid-${Date.now()}`,
+            id: generateUUID(),
             question: "",
             score: 0,
             type: "单选",
@@ -658,7 +744,7 @@ const ExerciseItem: React.FC<ExerciseItemProps> = ({ activePath, index, onRemove
             <span className="text-sm font-medium">选项</span>
             <button
               type="button"
-              onClick={() => append({ id: `uuid-${Date.now()}`, text: "", is_correct: false })}
+              onClick={() => append({ id: generateUUID(), text: "", is_correct: false })}
               className="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-xs"
             >
               + 添加选项
@@ -694,16 +780,64 @@ const ExerciseItem: React.FC<ExerciseItemProps> = ({ activePath, index, onRemove
 };
 
 // ---------------------------------------------------------
-// 5. 主入口组件
+// 5. Section 展示面板
+// ---------------------------------------------------------
+interface SectionPanelProps {
+  sections: Section[];
+  onInsertSection: (sectionData: Section) => void;
+}
+
+const SectionPanel: React.FC<SectionPanelProps> = ({ sections, onInsertSection }) => {
+  return (
+    <div className="w-80 border-l border-gray-300 p-4 bg-gray-50 overflow-y-auto h-full">
+      <h3 className="text-lg font-semibold mb-4">可用节 (Sections)</h3>
+      <div className="space-y-2">
+        {sections.length === 0 ? (
+          <p className="text-gray-400 text-sm">暂无可用的节</p>
+        ) : (
+          sections.map((section, idx) => (
+            <div key={section.id || idx} className="bg-white p-3 rounded border border-gray-200">
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex-1">
+                  <div className="font-medium text-sm mb-1">
+                    {section.title || `节 ${idx + 1}`}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    ID: {section.id}
+                  </div>
+                  {section.estimated_time && (
+                    <div className="text-xs text-gray-500">
+                      时长: {section.estimated_time}分钟
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onInsertSection(section)}
+                  className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 whitespace-nowrap"
+                >
+                  插入
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------
+// 6. 主入口组件
 // ---------------------------------------------------------
 interface CourseEditorProps {
   initialData?: CourseData;
   onSave?: (data: CourseData) => void;
+  workspaces?: Array<{ name: string; path: string }>;
 }
 
-const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
+const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave, workspaces = [] }) => {
   const defaultValues: CourseData = initialData || {
-    id: "uuidv4",
+    id: generateUUID(),
     title: "",
     description: "",
     chapters: []
@@ -725,7 +859,182 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
     type: null
   });
 
+  // 新增状态
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('');
+  const [availableSections, setAvailableSections] = useState<Section[]>([]);
+  const [openMode, setOpenMode] = useState<'workspace' | 'file' | null>(null); // 打开模式
+
+  // 统一对话框状态
+  const [dialog, setDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'success' | 'warning' | 'error' | 'confirm';
+    onConfirm?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
+  // 显示对话框的辅助函数
+  const showDialog = (
+    title: string,
+    message: string,
+    type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info',
+    onConfirm?: () => void,
+    confirmText?: string,
+    cancelText?: string
+  ) => {
+    setDialog({
+      isOpen: true,
+      title,
+      message,
+      type,
+      onConfirm,
+      confirmText,
+      cancelText
+    });
+  };
+
+  const closeDialog = () => {
+    setDialog({ ...dialog, isOpen: false });
+  };
+
   const { control } = methods;
+
+  // 从工作区加载课程和sections
+  const loadCourseFromWorkspace = async (workspaceName: string) => {
+    try {
+      const response = await fetch(`/api/course/${workspaceName}`);
+      const data = await response.json();
+
+      if (data.success) {
+        methods.reset(data.course);
+        setAvailableSections(data.sections);
+        setOpenMode('workspace');
+      } else {
+        showDialog('加载失败', data.error || '未知错误', 'error');
+      }
+    } catch (error) {
+      showDialog('加载失败', error instanceof Error ? error.message : '未知错误', 'error');
+    }
+  };
+
+  // 保存课程到工作区
+  const saveCourseToWorkspace = async () => {
+    if (!selectedWorkspace) {
+      showDialog('提示', '请选择工作区', 'warning');
+      return;
+    }
+
+    const courseData = methods.getValues();
+    try {
+      const response = await fetch(`/api/course/${selectedWorkspace}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ course: courseData }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showDialog('保存成功', '课程已成功保存到工作区', 'success');
+      } else {
+        showDialog('保存失败', data.error || '未知错误', 'error');
+      }
+    } catch (error) {
+      showDialog('保存失败', error instanceof Error ? error.message : '未知错误', 'error');
+    }
+  };
+
+  // 另存为JSON文件
+  const exportCourseJSON = () => {
+    const courseData = methods.getValues();
+    const jsonStr = JSON.stringify(courseData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `course-${courseData.id || Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // 打开JSON文件
+  const openJSONFile = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const jsonStr = event.target?.result as string;
+          const data = JSON.parse(jsonStr);
+          methods.reset(data);
+          setAvailableSections([]); // 清空可用sections
+          setSelectedWorkspace(''); // 清空工作区选择
+          setOpenMode('file');
+          showDialog('加载成功', 'JSON文件已成功加载', 'success');
+        } catch (error) {
+          showDialog('格式错误', error instanceof Error ? error.message : 'JSON文件格式错误', 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  // 插入section到最后一章
+  const handleInsertSection = (sectionData: Section) => {
+    const chapters = methods.getValues('chapters') || [];
+
+    if (chapters.length === 0) {
+      showDialog('提示', '请先创建章！', 'warning');
+      return;
+    }
+
+    // 检查ID是否重复
+    const allSectionIds = chapters.flatMap((chapter: Chapter) =>
+      (chapter.sections || []).map((section: Section) => section.id)
+    );
+
+    if (allSectionIds.includes(sectionData.id)) {
+      showDialog('ID冲突', `节ID "${sectionData.id}" 已存在，不允许插入重复ID的节！`, 'error');
+      return;
+    }
+
+    // 获取最后一章
+    const lastChapterIndex = chapters.length - 1;
+    const lastChapter = chapters[lastChapterIndex];
+    const sections = lastChapter.sections || [];
+
+    // 添加section到最后一章
+    const updatedChapters = [...chapters];
+    updatedChapters[lastChapterIndex] = {
+      ...lastChapter,
+      sections: [...sections, sectionData]
+    };
+
+    methods.setValue('chapters', updatedChapters);
+
+    // 重新计算order
+    setTimeout(() => {
+      recalculateSectionOrders();
+      setActiveNode({
+        path: `chapters.${lastChapterIndex}.sections.${sections.length}`,
+        type: 'section'
+      });
+    }, 0);
+  };
 
   // 重新计算所有section的order（全局单调递增）
   const recalculateSectionOrders = useCallback(() => {
@@ -763,7 +1072,7 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
   const handleAddChapter = () => {
     const chapters = methods.getValues('chapters') || [];
     const newChapter: Chapter = {
-      id: `uuid-${Date.now()}`,
+      id: generateUUID(),
       title: "",
       order: chapters.length,
       sections: []
@@ -781,7 +1090,7 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
     const sections = chapter.sections || [];
     // order会在recalculateSectionOrders中自动计算
     const newSection: Section = {
-      id: `uuid-${Date.now()}`,
+      id: generateUUID(),
       title: "",
       order: 0, // 临时值，会被自动计算覆盖
       estimated_time: 0,
@@ -938,19 +1247,87 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
     }
   };
 
-  const handleSave = (data: CourseData) => {
-    if (onSave) {
-      onSave(data);
-    } else {
-      console.log("最终保存的 JSON:", JSON.stringify(data, null, 2));
-    }
-  };
-
   return (
     <FormProvider {...methods}>
       <div className="flex flex-col h-screen bg-white">
-        <header className="px-6 py-4 border-b border-gray-300 flex justify-between items-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
-          <h2 className="text-xl font-semibold">课程结构编辑器</h2>
+        <header className="px-6 py-4 border-b border-gray-300 bg-gradient-to-r from-blue-500 to-indigo-600 text-white">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold">📚 课程结构编辑器</h2>
+
+            <div className="flex items-center gap-4">
+              {/* 操作按钮组 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={openJSONFile}
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded text-sm font-medium transition-colors border border-white/30"
+                  title="从本地文件打开JSON"
+                >
+                  📂 选中JSON
+                </button>
+                <button
+                  onClick={saveCourseToWorkspace}
+                  disabled={openMode !== 'workspace'}
+                  className={`px-3 py-1.5 text-white rounded text-sm font-medium transition-colors ${openMode !== 'workspace'
+                    ? 'bg-white/10 cursor-not-allowed opacity-50'
+                    : 'bg-white/20 hover:bg-white/30 border border-white/30'
+                    }`}
+                  title={openMode !== 'workspace' ? '只能在从工作区打开时保存' : '保存到工作区'}
+                >
+                  💾 保存
+                </button>
+                <button
+                  onClick={exportCourseJSON}
+                  className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded text-sm font-medium transition-colors border border-white/30"
+                  title="导出JSON文件"
+                >
+                  📥 另存为
+                </button>
+              </div>
+
+              {/* 工作区选择 */}
+              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg">
+                <span className="text-sm font-medium">📁 工作区</span>
+                <select
+                  value={selectedWorkspace}
+                  onChange={(e) => {
+                    const workspace = e.target.value;
+                    setSelectedWorkspace(workspace);
+                    if (workspace) {
+                      loadCourseFromWorkspace(workspace);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-md text-gray-800 text-sm font-medium border-2 border-blue-200 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-300 min-w-[200px] bg-white"
+                >
+                  <option value="">请选择工作区...</option>
+                  {workspaces.map((ws) => (
+                    <option key={ws.name} value={ws.name}>
+                      {ws.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedWorkspace && (
+                  <span className="text-xs bg-green-400 text-green-900 px-2 py-1 rounded-full font-medium">
+                    已连接
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 当前打开模式提示 */}
+          {openMode && (
+            <div className="mt-2 text-xs opacity-90">
+              {openMode === 'workspace' ? (
+                <span className="bg-white/20 px-2 py-1 rounded">
+                  💾 工作区模式 - 可保存到服务器
+                </span>
+              ) : (
+                <span className="bg-yellow-400/30 px-2 py-1 rounded">
+                  📄 文件模式 - 只能另存为导出
+                </span>
+              )}
+            </div>
+          )}
         </header>
 
         <div className="flex flex-1 overflow-hidden">
@@ -964,28 +1341,35 @@ const CourseEditor: React.FC<CourseEditorProps> = ({ initialData, onSave }) => {
             onMoveSection={handleMoveSection}
           />
 
-          {/* 右侧：数据编辑 */}
+          {/* 中间：数据编辑 */}
           <PropertyEditor
             activePath={activeNode.path}
             activeType={activeNode.type}
             onDelete={handleDelete}
           />
+
+          {/* 右侧：Section展示面板 */}
+          <SectionPanel sections={availableSections} onInsertSection={handleInsertSection} />
         </div>
 
-        {/* 底部操作栏 */}
-        <div className="px-6 py-3 border-t border-gray-300 bg-gray-50 flex justify-between items-center">
+        {/* 底部状态栏 */}
+        <div className="px-6 py-2 border-t border-gray-300 bg-gray-50">
           <div className="text-sm text-gray-600">
-            {activeNode.path && `当前编辑: ${activeNode.path}`}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={methods.handleSubmit(handleSave)}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm font-medium"
-            >
-              保存 JSON
-            </button>
+            {activeNode.path ? `当前编辑: ${activeNode.path}` : '请选择左侧节点进行编辑'}
           </div>
         </div>
+
+        {/* 统一对话框 */}
+        <ConfirmDialog
+          isOpen={dialog.isOpen}
+          title={dialog.title}
+          message={dialog.message}
+          type={dialog.type}
+          onConfirm={dialog.onConfirm}
+          onCancel={closeDialog}
+          confirmText={dialog.confirmText}
+          cancelText={dialog.cancelText}
+        />
       </div>
     </FormProvider>
   );

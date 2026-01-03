@@ -22,6 +22,7 @@ export interface AppConfig {
   download_all_parts?: boolean;
   max_concurrent_tasks?: number;
   last_selected_model?: string;
+  last_workspace_name?: string;
 }
 
 export interface ConfigResponse extends ApiResponse {
@@ -67,9 +68,8 @@ export interface TasksResponse extends ApiResponse {
 
 export interface CreateTaskRequest {
   urls: string[];
-  output_dir: string;
+  workspace_name: string;
   model_name: string;
-  custom_folder_name?: string;
   download_all_parts: boolean;
   generate_options: GenerateOptions;
 }
@@ -97,6 +97,16 @@ export interface ModelFormData {
   model_name: string;
   api_base: string;
   api_key: string;
+}
+
+export interface Workspace {
+  name: string;
+  path: string;
+  created_at: string;
+}
+
+export interface WorkspacesResponse extends ApiResponse {
+  workspaces: Workspace[];
 }
 
 // 课程数据结构类型定义

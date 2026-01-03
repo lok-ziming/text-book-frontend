@@ -80,9 +80,7 @@ export default function TaskList({ tasks, onStopTask }: TaskListProps) {
           const statusClass = getStatusClass(task.status);
           const borderClass = getBorderClass(task.status);
 
-          const showStopButton =
-            (task.status === 'downloading' || task.status === 'summarizing') &&
-            task.status !== 'stopping';
+          const showStopButton = task.status === 'downloading' || task.status === 'summarizing';
 
           return (
             <div
@@ -156,4 +154,5 @@ export default function TaskList({ tasks, onStopTask }: TaskListProps) {
     </div>
   );
 }
+
 
